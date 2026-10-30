@@ -1,0 +1,9 @@
+{
+  "name": "impostor-palabras-online",
+  "version": "1.0.0",
+  "description": "Juego online del impostor con palabras (3 a 12 jugadores)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
