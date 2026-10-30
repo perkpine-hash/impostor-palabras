@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El Impostor de las Palabras</title>
+<style>
+:root{--bg:#10131c;--fg:#eef1f8;--card:#1b2030}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,sans-serif;text-align:center}
+#app{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:26px;margin:8px 0}
+.card{background:var(--card);border-radius:14px;padding:16px;margin:12px 0}
+.big{font-size:38px;font-weight:800;margin:8px 0}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 18px;margin:5px;background:#ff5a5a;color:#fff;cursor:pointer}
+button:disabled{opacity:.35;cursor:default}
+button.g{background:#43a047}button.o{background:#2c3550}
+input[type=text]{font:inherit;padding:10px;border-radius:8px;border:0;width:70%;max-width:260px;text-align:center;margin:4px}
+.pl{list-style:none;padding:0;margin:0}.pl li{padding:6px;border-bottom:1px solid #ffffff18}
+.me{color:#fdd835}.cur{background:#ffffff14;border-radius:8px}.off{opacity:.4}
+.bad{color:#ff7a7a}.ok{color:#6fdc8c}
+</style></head><body>
+<div id="app"></div>
+<script>
+const app=document.getElementById('app');
+const el=(t,x,c)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e};
+const qs=new URLSearchParams(location.search);
+let ws=null,S=null,joined=false,msg='',hintOpt=true,draft='',
+    name=localStorage.getItem('name')||'',room=(qs.get('sala')||'').toUpperCase(),
+    pid=sessionStorage.getItem('pid'),pidRoom=sessionStorage.getItem('pidRoom');
+const send=o=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))};
+function connect(){
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+  ws.onopen=()=>{send({t:'join',room,name,pid:pidRoom===room?pid:null});};
+  ws.onmessage=e=>{const m=JSON.parse(e.data);
+    if(m.t==='joined'){joined=true;pid=m.pid;room=m.room;pidRoom=room;sessionStorage.setItem('pid',pid);sessionStorage.setItem('pidRoom',room);history.replaceState(null,'','?sala='+room);msg=''}
+    else if(m.t==='state'){S=m;draft=S.phase==='clue'||S.phase==='guess'?draft:''}
+    else if(m.t==='err'){msg=m.msg;joined=false;S=null}
+    render()};
+  ws.onclose=()=>{if(joined){msg='Reconectando…';render();setTimeout(connect,1500)}};
+}
+setInterval(()=>send({t:'ping'}),25000);
+function enter(code){name=name.trim();code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!name){msg='Escribe tu nombre';return render()}if(!code){msg='Escribe el código de sala';return render()}
+  localStorage.setItem('name',name);room=code;msg='';
+  if(ws&&ws.readyState===1)send({t:'join',room,name,pid:pidRoom===room?pid:null});else connect()}
+const nameOf=id=>{const p=S.players.find(q=>q.id===id);return p?p.name:'?'};
+function plist(){const ul=el('ul',null,'pl');S.players.forEach(p=>{const li=el('li',p.name+(p.id===S.me?' (tú)':'')+(p.id===S.host&&S.phase==='lobby'?' 👑':'')+(S.phase==='vote'&&p.voted?' ✔':''));
+  if(p.id===S.me)li.classList.add('me');if(!p.on)li.classList.add('off');if(S.phase==='clue'&&p.id===S.turn)li.classList.add('cur');ul.append(li)});return ul}
+function cluesBox(){const ul=el('ul',null,'pl');S.clues.forEach(c=>ul.append(el('li',c.n+': '+c.w)));return ul}
+function inputRow(ph,btn,type){const wrap=el('div');const i=el('input');i.type='text';i.id='in';i.maxLength=30;i.placeholder=ph;i.value=draft;i.oninput=()=>draft=i.value;
+  const b=el('button',btn,'g');const go=()=>{const v=i.value.trim();if(v){send({t:type,[type==='clue'?'w':'g']:v});draft='';i.value=''}};
+  b.onclick=go;i.onkeydown=e=>{if(e.key==='Enter')go()};wrap.append(i,b);return wrap}
+function render(){
+  const hadFocus=document.activeElement&&document.activeElement.id==='in';
+  app.innerHTML='';app.append(el('h1','🕵️ El Impostor de las Palabras'));
+  if(msg)app.append(el('div',msg,'card bad'));
+  if(!joined||!S){
+    const c=el('div',null,'card');
+    const n=el('input');n.type='text';n.maxLength=12;n.placeholder='Tu nombre';n.value=name;n.oninput=()=>name=n.value;
+    const r=el('input');r.type='text';r.maxLength=6;r.placeholder='Código de sala';r.value=room;r.oninput=()=>{r.value=r.value.toUpperCase();room=r.value};
+    const j=el('button','UNIRSE A SALA','g');j.onclick=()=>enter(r.value);
+    const nw=el('button','CREAR SALA NUEVA','o');nw.onclick=()=>{const L='ABCDEFGHJKLMNPQRSTUVWXYZ';let k='';for(let i=0;i<4;i++)k+=L[Math.floor(Math.random()*L.length)];enter(k)};
+    c.append(n,el('br'),r,el('br'),j,nw);app.append(c);
+    app.append(el('div','Se juega entre 3 y 12 personas. Crea una sala y comparte el enlace con tus amigos.','card'));return}
+  if(S.phase==='lobby'){
+    const c=el('div',null,'card');c.append(el('p','Sala'),el('div',S.room,'big'));
+    const cp=el('button','COPIAR ENLACE','o');cp.onclick=()=>{navigator.clipboard.writeText(location.origin+'/?sala='+S.room).then(()=>{cp.textContent='¡Copiado!'}).catch(()=>{cp.textContent=location.origin+'/?sala='+S.room})};
+    c.append(cp,el('p','Jugadores:'),plist());
+    if(S.me===S.host){const lab=el('label',' Dar la categoría al impostor');const cb=el('input');cb.type='checkbox';cb.checked=hintOpt;cb.onchange=()=>hintOpt=cb.checked;lab.prepend(cb);
+      const go=el('button','EMPEZAR PARTIDA','g');go.disabled=S.players.filter(p=>p.on).length<3;go.onclick=()=>send({t:'start',hint:hintOpt});c.append(lab,el('br'),go,el('p','Mínimo 3 jugadores.'))}
+    else c.append(el('p','Esperando a que el anfitrión empiece (mínimo 3 jugadores)…'));
+    app.append(c);return}
+  if(S.phase==='clue'){
+    const c=el('div',null,'card');c.append(el('p',S.isImp?'Eres el...':'Tu palabra es:'),el('div',S.isImp?'IMPOSTOR':S.word,'big '+(S.isImp?'bad':'ok')));
+    c.append(el('p',S.cat?'Categoría: '+S.cat:'No conoces la categoría. Disimula.'));
+    if(S.isImp)c.append(el('p','Deduce la palabra por las pistas de los demás.'));app.append(c);
+    const t=el('div',null,'card');t.append(el('p','Ronda '+S.round+' de 2 · Turno de '+nameOf(S.turn)+(S.turn===S.me?' (tú)':'')));
+    if(S.turn===S.me)t.append(inputRow('Una palabra de pista','ENVIAR PISTA','clue'));app.append(t);
+    const l=el('div',null,'card');l.append(el('b','Pistas'),cluesBox(),plist());app.append(l);
+    if(S.me===S.host){const s=el('button','Saltar turno','o');s.onclick=()=>send({t:'skip'});const v=el('button','Pasar a votar','o');v.onclick=()=>send({t:'goto'});app.append(s,v)}
+  }else if(S.phase==='vote'){
+    const c=el('div',null,'card');c.append(el('h2','¿Quién es el impostor?'));const voted=S.players.find(p=>p.id===S.me).voted;
+    S.players.forEach(p=>{if(p.id===S.me)return;const b=el('button',p.name,'o');b.disabled=voted;b.onclick=()=>send({t:'vote',v:p.id});c.append(b,el('br'))});
+    c.append(el('p',voted?'Voto enviado. Esperando al resto…':'Elige a quién votas.'),plist());app.append(c);const l=el('div',null,'card');l.append(el('b','Pistas'),cluesBox());app.append(l);
+  }else if(S.phase==='guess'){
+    const c=el('div',null,'card');c.append(el('h2','¡Han descubierto al impostor!'));
+    if(S.isImp){c.append(el('p','Última oportunidad: adivina la palabra secreta.'),inputRow('La palabra','ADIVINAR','guess'))}
+    else c.append(el('p','El impostor intenta adivinar la palabra…'));app.append(c);
+  }else if(S.phase==='end'){
+    const c=el('div',null,'card');c.append(el('h2',S.res),el('p','El impostor era: '+nameOf(S.imp)),el('p','La palabra era: '+S.word+' ('+S.cat+')'));
+    if(S.me===S.host){const b=el('button','VOLVER AL LOBBY','g');b.onclick=()=>send({t:'lobby'});c.append(b)}else c.append(el('p','Esperando al anfitrión…'));app.append(c)}
+  if(hadFocus){const i=document.getElementById('in');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
+}
+render();
+if(room&&name&&pidRoom===room){joined=false;connect();ws.addEventListener('open',()=>{});}
+</script></body></html>
